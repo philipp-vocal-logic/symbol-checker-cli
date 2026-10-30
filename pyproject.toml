@@ -1,0 +1,58 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "symbol-checker-cli"
+version = "0.1.0"
+description = "Enforce unified project symbol naming schemas defined in a TOML configuration."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12"
+dependencies = [
+    "pathspec>=0.12.1",
+]
+
+[project.scripts]
+symbol = "symbol_checker.cli:main"
+symbol-checker = "symbol_checker.cli:main"
+
+[dependency-groups]
+dev = [
+    "archcheck",
+    "glossary-checker-cli",
+    "pytest>=8.0.0",
+    "ruff>=0.8.0",
+]
+
+[tool.uv.sources]
+archcheck = { path = "../architecture-checker-cli", editable = true }
+glossary-checker-cli = { path = "../glossary-checker-cli", editable = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/symbol_checker"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "I",
+    "UP",
+    "B",
+    "SIM",
+    "C90",
+    "N",
+    "ARG",
+    "ERA",
+    "ANN",
+]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 8

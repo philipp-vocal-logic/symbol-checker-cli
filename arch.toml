@@ -1,0 +1,50 @@
+[[rules]]
+files = ["src/**/*.py"]
+max_lines = 250
+forbid = [
+    "^\\s*from\\s+\\.",
+    "^\\s*(from|import)\\s+(pytest|tests|subprocess)\\b",
+]
+fix = "Keep source modules under 250 lines, use absolute imports, and avoid importing pytest, tests, or subprocess."
+
+[[rules]]
+files = ["src/symbol_checker/schema.py"]
+forbid = [
+    "^\\s*(from|import)\\s+.*\\b(validator|extractor|checker|cli|ast|pathspec|argparse|os|sys)\\b",
+    "\\bprint\\s*\\(",
+]
+fix = "Keep schema.py as the leaf domain layer without importing validator, extractor, checker, cli, ast, pathspec, or CLI/OS modules."
+
+[[rules]]
+files = ["src/symbol_checker/validator.py"]
+forbid = [
+    "^\\s*(from|import)\\s+.*\\b(extractor|checker|cli|ast|pathspec|tomllib|argparse|os|sys)\\b",
+    "\\.(read_text|read_bytes|write_text|write_bytes|open)\\s*\\(",
+    "\\b(open|print)\\s*\\(",
+]
+fix = "Keep validator.py pure in-memory depending only on schema.py, without filesystem I/O or imports from extractor, checker, or cli."
+
+[[rules]]
+files = ["src/symbol_checker/extractor.py"]
+forbid = [
+    "^\\s*(from|import)\\s+.*\\b(validator|checker|cli|pathspec|tomllib|argparse|os|sys)\\b",
+    "\\.(read_text|read_bytes|write_text|write_bytes|open)\\s*\\(",
+    "\\b(open|print)\\s*\\(",
+]
+fix = "Keep extractor.py pure in-memory depending only on ast and schema.py, without filesystem I/O or imports from validator, checker, or cli."
+
+[[rules]]
+files = ["src/symbol_checker/checker.py", "src/symbol_checker/__init__.py"]
+forbid = [
+    "^\\s*(from|import)\\s+.*\\b(cli|argparse|sys|tomllib)\\b",
+    "\\bprint\\s*\\(",
+]
+fix = "Keep checker.py and __init__.py free of CLI concerns (cli, argparse, sys, print) and raw TOML parsing."
+
+[[rules]]
+files = ["tests/**/*.py"]
+max_lines = 250
+forbid = [
+    "^\\s*from\\s+\\.",
+]
+fix = "Keep test modules under 250 lines and use absolute imports."

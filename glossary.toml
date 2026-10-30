@@ -1,0 +1,54 @@
+[settings]
+paths = ["."]
+exclude = [".git/", "arch.toml", "glossary.toml", "symbols.toml", "uv.lock"]
+similarity_threshold = 0.65
+
+[[terms]]
+term = "glossary"
+definition = "The configured collection of canonical domain terms and their definitions in glossary.toml."
+forbidden_terms = ["dictionary", "vocabulary", "lexicon", "wordbook"]
+
+[[terms]]
+term = "schema"
+definition = "The configured collection of symbol naming rules and canonical terms in symbols.toml."
+forbidden_terms = ["ruleset", "convention", "rulebook"]
+
+[[terms]]
+term = "term"
+definition = "An approved word or phrase defined in the glossary or schema."
+forbidden_terms = ["keyword", "buzzword", "headword"]
+
+[[terms]]
+term = "definition"
+definition = "The unambiguous explanation of what a canonical term means."
+forbidden_terms = ["meaning_text", "gloss"]
+
+[[terms]]
+term = "forbidden_term"
+definition = "A disallowed synonym that must be replaced by its canonical term."
+forbidden_terms = ["banned_word", "blacklist_word", "disallowed_word", "rejected_synonym"]
+
+[[terms]]
+term = "forbidden_subword"
+definition = "An ambiguous standalone subword banned from appearing in any symbol name."
+forbidden_terms = ["banned_subword", "vague_word", "disallowed_subword"]
+
+[[terms]]
+term = "symbol"
+definition = "A named code identifier extracted from a syntax tree with its location."
+forbidden_terms = ["identifier_node", "ast_token", "code_entity"]
+
+[[terms]]
+term = "subword"
+definition = "A single lowercase word unit decomposed from a compound identifier."
+forbidden_terms = ["token_part", "word_piece", "lexeme", "chunk"]
+
+[[terms]]
+term = "finding"
+definition = "A single deterministic problem reported during schema validation or symbol checking."
+forbidden_terms = ["violation", "offense", "infringement", "issue"]
+
+[[terms]]
+term = "suggestion"
+definition = "Actionable advice emitted with a finding to guide an agent or user."
+forbidden_terms = ["fix_hint", "remediation", "recommendation"]
