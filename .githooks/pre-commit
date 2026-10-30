@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "Running pre-commit checks..."
+
+uv lock --check
+uv run ruff check .
+uv run ruff format --check .
+uv run glossary
+uv run symbol
+uv run architecture
+uv run pytest
+
+echo "All pre-commit checks passed."
