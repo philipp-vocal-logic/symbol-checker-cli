@@ -10,23 +10,13 @@ forbidden_terms = ["dictionary", "vocabulary", "lexicon", "wordbook"]
 
 [[terms]]
 term = "schema"
-definition = "The configured collection of symbol naming rules and canonical terms in symbols.toml."
+definition = "Deserialized TOML configuration specifying file globs, forbidden_subwords, and subword replacements."
 forbidden_terms = ["ruleset", "convention", "rulebook"]
 
 [[terms]]
-term = "term"
-definition = "An approved word or phrase defined in the glossary or schema."
-forbidden_terms = ["keyword", "buzzword", "headword"]
-
-[[terms]]
-term = "definition"
-definition = "The unambiguous explanation of what a canonical term means."
-forbidden_terms = ["meaning_text", "gloss"]
-
-[[terms]]
-term = "forbidden_term"
-definition = "A disallowed synonym that must be replaced by its canonical term."
-forbidden_terms = ["banned_word", "blacklist_word", "disallowed_word", "rejected_synonym"]
+term = "replacement"
+definition = "A mapping in symbols.toml from a canonical subword to its disallowed synonyms or abbreviations."
+forbidden_terms = ["substitution_rule", "alias_map"]
 
 [[terms]]
 term = "forbidden_subword"
@@ -35,7 +25,7 @@ forbidden_terms = ["banned_subword", "vague_word", "disallowed_subword"]
 
 [[terms]]
 term = "symbol"
-definition = "A named code identifier extracted from a syntax tree with its location."
+definition = "A named code identifier extracted from a syntax tree with its location and kind."
 forbidden_terms = ["identifier_node", "ast_token", "code_entity"]
 
 [[terms]]

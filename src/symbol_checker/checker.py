@@ -11,9 +11,9 @@ import pathspec
 from symbol_checker.extractor import extract_symbols
 from symbol_checker.schema import (
     Finding,
+    Replacement,
     Symbol,
     SymbolSchema,
-    Term,
     matches_subwords,
     normalize_subwords,
     singularize,
@@ -25,7 +25,7 @@ from symbol_checker.validator import validate_schema
 class _CompiledRules:
     forbidden_subwords: frozenset[str]
     allowed_symbols: frozenset[str]
-    forbidden_terms: tuple[tuple[tuple[str, ...], str, Term], ...]
+    replacements: tuple[tuple[tuple[str, ...], str, Replacement], ...]
 
 
 def check_project(
@@ -89,16 +89,16 @@ def _extract_ignored_lines(source_text: str) -> frozenset[int]:
 
 
 def _build_compiled_rules(schema: SymbolSchema) -> _CompiledRules:
-    forbidden_terms = tuple(
+    replacements = tuple(
         (norm_synonym, raw_synonym, entry)
-        for entry in schema.terms
-        for raw_synonym in entry.forbidden_terms
+        for entry in schema.replacements
+        for raw_synonym in entry.forbidden
         if (norm_synonym := normalize_subwords(raw_synonym))
     )
     return _CompiledRules(
         forbidden_subwords=frozenset(singularize(word) for word in schema.forbidden_subwords),
         allowed_symbols=frozenset(schema.allowed_symbols),
-        forbidden_terms=forbidden_terms,
+        replacements=replacements,
     )
 
 
@@ -113,16 +113,16 @@ def _check_single_symbol(symbol: Symbol, compiled: _CompiledRules) -> list[Findi
         for word in dict.fromkeys(subwords)
         if word in compiled.forbidden_subwords
     ]
-    synonym_findings = [
+    replacement_findings = [
         _build_symbol_finding(
             symbol,
-            f"Uses forbidden term '{raw_forbidden}'.",
-            f"Use canonical term '{entry.term}' ({entry.definition}).",
+            f"Uses non-canonical '{raw_forbidden}'.",
+            f"Use canonical '{entry.canonical}'.",
         )
-        for forbidden_words, raw_forbidden, entry in compiled.forbidden_terms
+        for forbidden_words, raw_forbidden, entry in compiled.replacements
         if matches_subwords(subwords, forbidden_words)
     ]
-    return [*subword_findings, *synonym_findings]
+    return [*subword_findings, *replacement_findings]
 
 
 def _build_symbol_finding(symbol: Symbol, message: str, suggestion: str) -> Finding:

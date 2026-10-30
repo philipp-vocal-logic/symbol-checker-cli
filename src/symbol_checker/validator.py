@@ -4,24 +4,20 @@ from pathlib import Path
 
 from symbol_checker.schema import (
     Finding,
+    Replacement,
     SymbolSchema,
-    Term,
     matches_subwords,
     normalize_subwords,
 )
 
 
 def validate_schema(schema: SymbolSchema) -> list[Finding]:
-    """Validate the schema for empty entries, collisions, and duplicate definitions."""
+    """Validate the schema for empty entries and subword collisions."""
     source = schema.source_path
-    findings, canonical_by_norm = _validate_canonical_entries(schema.terms, source)
-    forbidden_findings, forbidden_owner = _validate_forbidden_entries(
-        schema.terms, source, canonical_by_norm
-    )
+    findings, canonical_by_norm = _validate_canonical_entries(schema.replacements, source)
+    forbidden_findings = _validate_forbidden_entries(schema.replacements, source, canonical_by_norm)
     findings.extend(forbidden_findings)
     findings.extend(_check_forbidden_subword_collisions(schema, canonical_by_norm, source))
-    findings.extend(_check_duplicate_definitions(schema.terms, source))
-    findings.extend(_check_definitions_for_forbidden_terms(schema.terms, forbidden_owner, source))
     return findings
 
 
@@ -30,78 +26,69 @@ def _build_schema_finding(source: Path, message: str, suggestion: str) -> Findin
 
 
 def _validate_canonical_entries(
-    entries: tuple[Term, ...],
+    entries: tuple[Replacement, ...],
     source: Path,
-) -> tuple[list[Finding], dict[tuple[str, ...], Term]]:
+) -> tuple[list[Finding], dict[tuple[str, ...], Replacement]]:
     findings: list[Finding] = []
-    canonical_by_norm: dict[tuple[str, ...], Term] = {}
+    canonical_by_norm: dict[tuple[str, ...], Replacement] = {}
     for entry in entries:
         findings.extend(_validate_single_entry(entry, source, canonical_by_norm))
     return findings, canonical_by_norm
 
 
 def _validate_single_entry(
-    entry: Term,
+    entry: Replacement,
     source: Path,
-    canonical_by_norm: dict[tuple[str, ...], Term],
+    canonical_by_norm: dict[tuple[str, ...], Replacement],
 ) -> list[Finding]:
-    findings: list[Finding] = []
-    norm_term = normalize_subwords(entry.term)
-    if not norm_term:
+    norm_canonical = normalize_subwords(entry.canonical)
+    if not norm_canonical:
         return [
             _build_schema_finding(
                 source,
-                "Schema contains an empty term.",
-                "Provide a non-empty canonical term name.",
+                "Schema contains an empty replacement key.",
+                "Provide a non-empty canonical subword name.",
             )
         ]
 
-    if not normalize_subwords(entry.definition):
-        findings.append(
+    if norm_canonical in canonical_by_norm:
+        existing = canonical_by_norm[norm_canonical]
+        return [
             _build_schema_finding(
                 source,
-                f"Term '{entry.term}' has an empty definition.",
-                f"Provide a clear definition for '{entry.term}'.",
+                f"Duplicate canonical replacement '{entry.canonical}' "
+                f"(collides with '{existing.canonical}').",
+                f"Keep only one replacement entry for '{existing.canonical}'.",
             )
-        )
+        ]
 
-    if norm_term in canonical_by_norm:
-        existing = canonical_by_norm[norm_term]
-        findings.append(
-            _build_schema_finding(
-                source,
-                f"Duplicate canonical term '{entry.term}' (collides with '{existing.term}').",
-                f"Keep only one canonical term entry for '{existing.term}'.",
-            )
-        )
-    else:
-        canonical_by_norm[norm_term] = entry
-    return findings
+    canonical_by_norm[norm_canonical] = entry
+    return []
 
 
 def _validate_forbidden_entries(
-    entries: tuple[Term, ...],
+    entries: tuple[Replacement, ...],
     source: Path,
-    canonical_by_norm: dict[tuple[str, ...], Term],
-) -> tuple[list[Finding], dict[tuple[str, ...], tuple[str, Term]]]:
+    canonical_by_norm: dict[tuple[str, ...], Replacement],
+) -> list[Finding]:
     findings: list[Finding] = []
-    forbidden_owner: dict[tuple[str, ...], tuple[str, Term]] = {}
+    forbidden_owner: dict[tuple[str, ...], tuple[str, Replacement]] = {}
     for entry in entries:
-        for forbidden in entry.forbidden_terms:
+        for forbidden in entry.forbidden:
             findings.extend(
                 _validate_single_forbidden(
                     entry, forbidden, source, canonical_by_norm, forbidden_owner
                 )
             )
-    return findings, forbidden_owner
+    return findings
 
 
 def _validate_single_forbidden(
-    entry: Term,
+    entry: Replacement,
     forbidden: str,
     source: Path,
-    canonical_by_norm: dict[tuple[str, ...], Term],
-    forbidden_owner: dict[tuple[str, ...], tuple[str, Term]],
+    canonical_by_norm: dict[tuple[str, ...], Replacement],
+    forbidden_owner: dict[tuple[str, ...], tuple[str, Replacement]],
 ) -> list[Finding]:
     findings: list[Finding] = []
     norm_forbidden = normalize_subwords(forbidden)
@@ -109,8 +96,8 @@ def _validate_single_forbidden(
         return [
             _build_schema_finding(
                 source,
-                f"Term '{entry.term}' contains an empty forbidden_term.",
-                f"Remove the empty entry from forbidden_terms of '{entry.term}'.",
+                f"Replacement '{entry.canonical}' contains an empty forbidden entry.",
+                f"Remove the empty entry from replacements of '{entry.canonical}'.",
             )
         ]
 
@@ -119,10 +106,10 @@ def _validate_single_forbidden(
             findings.append(
                 _build_schema_finding(
                     source,
-                    f"Term '{colliding.term}' collides with forbidden_term "
-                    f"'{forbidden}' in '{entry.term}'.",
-                    f"Remove '{forbidden}' from forbidden_terms of '{entry.term}' "
-                    f"or merge '{colliding.term}' into '{entry.term}'.",
+                    f"Replacement '{colliding.canonical}' collides with forbidden entry "
+                    f"'{forbidden}' in '{entry.canonical}'.",
+                    f"Remove '{forbidden}' from '{entry.canonical}' "
+                    f"or merge '{colliding.canonical}' into '{entry.canonical}'.",
                 )
             )
 
@@ -131,10 +118,9 @@ def _validate_single_forbidden(
         findings.append(
             _build_schema_finding(
                 source,
-                f"Forbidden term '{forbidden}' in '{entry.term}' collides with "
-                f"'{prev_raw}' in '{prev_entry.term}'.",
-                f"Keep '{forbidden}' under only one canonical term so each "
-                "forbidden_term maps to a single canonical meaning.",
+                f"Forbidden entry '{forbidden}' in '{entry.canonical}' collides with "
+                f"'{prev_raw}' in '{prev_entry.canonical}'.",
+                f"Keep '{forbidden}' under only one canonical replacement.",
             )
         )
     else:
@@ -144,7 +130,7 @@ def _validate_single_forbidden(
 
 def _check_forbidden_subword_collisions(
     schema: SymbolSchema,
-    canonical_by_norm: dict[tuple[str, ...], Term],
+    canonical_by_norm: dict[tuple[str, ...], Replacement],
     source: Path,
 ) -> list[Finding]:
     findings: list[Finding] = []
@@ -155,62 +141,20 @@ def _check_forbidden_subword_collisions(
                 _build_schema_finding(
                     source,
                     f"Invalid forbidden_subword '{subword}' (must be a single subword).",
-                    "Move multi-word entries to forbidden_terms or split into subwords.",
+                    "Move multi-word entries to replacements or split into subwords.",
                 )
             )
             continue
         target_word = norm[0]
-        for norm_term, entry in canonical_by_norm.items():
-            if target_word in norm_term:
+        for norm_canonical, entry in canonical_by_norm.items():
+            if target_word in norm_canonical:
                 findings.append(
                     _build_schema_finding(
                         source,
-                        f"Canonical term '{entry.term}' collides with "
+                        f"Canonical replacement '{entry.canonical}' collides with "
                         f"forbidden_subword '{subword}'.",
-                        f"Remove '{subword}' from forbidden_subwords or rename '{entry.term}'.",
+                        f"Remove '{subword}' from forbidden_subwords or "
+                        f"rename '{entry.canonical}'.",
                     )
                 )
     return findings
-
-
-def _check_duplicate_definitions(
-    entries: tuple[Term, ...],
-    source: Path,
-) -> list[Finding]:
-    findings: list[Finding] = []
-    seen_definitions: dict[tuple[str, ...], Term] = {}
-    for entry in entries:
-        norm_def = normalize_subwords(entry.definition)
-        if not norm_def:
-            continue
-        if norm_def in seen_definitions:
-            first_entry = seen_definitions[norm_def]
-            findings.append(
-                _build_schema_finding(
-                    source,
-                    f"Terms '{first_entry.term}' and '{entry.term}' have identical definitions.",
-                    f"Merge '{entry.term}' into forbidden_terms of '{first_entry.term}' "
-                    "or provide distinct definitions.",
-                )
-            )
-        else:
-            seen_definitions[norm_def] = entry
-    return findings
-
-
-def _check_definitions_for_forbidden_terms(
-    entries: tuple[Term, ...],
-    forbidden_owner: dict[tuple[str, ...], tuple[str, Term]],
-    source: Path,
-) -> list[Finding]:
-    return [
-        _build_schema_finding(
-            source,
-            f"Definition of '{entry.term}' uses forbidden_term '{raw_forbidden}'.",
-            f"Use canonical term '{canonical_entry.term}' ({canonical_entry.definition}).",
-        )
-        for entry in entries
-        if (words := normalize_subwords(entry.definition))
-        for forbidden_words, (raw_forbidden, canonical_entry) in forbidden_owner.items()
-        if matches_subwords(words, forbidden_words)
-    ]

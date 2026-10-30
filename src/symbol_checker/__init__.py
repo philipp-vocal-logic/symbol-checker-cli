@@ -4,9 +4,10 @@ from symbol_checker.checker import check_project, check_source, discover_files
 from symbol_checker.extractor import extract_symbols
 from symbol_checker.schema import (
     Finding,
+    Replacement,
     Symbol,
+    SymbolKind,
     SymbolSchema,
-    Term,
     load_schema,
     matches_subwords,
     normalize_subwords,
@@ -17,9 +18,10 @@ from symbol_checker.validator import validate_schema
 
 __all__ = [
     "Finding",
+    "Replacement",
     "Symbol",
+    "SymbolKind",
     "SymbolSchema",
-    "Term",
     "check_project",
     "check_source",
     "discover_files",

@@ -4,28 +4,43 @@ import re
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
+_UPPER = r"[A-ZÀ-ÖØ-Þ]"
+_LOWER = r"[a-zß-öø-ÿ]"
 SUBWORD_PATTERN = re.compile(
-    r"[A-Z]{2,}s(?=[A-Z][a-z]|\d|_|\b)|[A-Z]+(?=[A-Z][a-z]|\d|_|\b)|[A-Z]?[a-z]+|\d+"
+    rf"{_UPPER}{{2,}}s(?={_UPPER}{_LOWER}|\d|_|\b)"
+    rf"|{_UPPER}+(?={_UPPER}{_LOWER}|\d|_|\b)"
+    rf"|{_UPPER}?{_LOWER}+|\d+"
 )
 INVARIANT_SINGULARS: frozenset[str] = frozenset(
-    {"alias", "bias", "canvas", "news", "series", "species"}
+    {"alias", "atlas", "bias", "canvas", "chaos", "corpus", "lens", "news", "series", "species"}
 )
 
-ALLOWED_ROOT_KEYS: frozenset[str] = frozenset({"settings", "terms"})
+SymbolKind = Literal[
+    "module",
+    "class",
+    "function",
+    "parameter",
+    "variable",
+    "attribute",
+    "exception",
+    "alias",
+    "typevar",
+]
+
+ALLOWED_ROOT_KEYS: frozenset[str] = frozenset({"settings", "replacements"})
 ALLOWED_SETTINGS_KEYS: frozenset[str] = frozenset(
     {"include", "exclude", "forbidden_subwords", "allowed_symbols"}
 )
-ALLOWED_TERM_KEYS: frozenset[str] = frozenset({"term", "definition", "forbidden_terms"})
 
 
 @dataclass(frozen=True, slots=True)
-class Term:
-    """An approved domain term with its unambiguous definition and disallowed synonyms."""
+class Replacement:
+    """A mapping from a canonical symbol subword to disallowed synonyms or abbreviations."""
 
-    term: str
-    definition: str
-    forbidden_terms: tuple[str, ...] = ()
+    canonical: str
+    forbidden: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,6 +51,7 @@ class Symbol:
     file: Path
     line: int
     column: int
+    kind: SymbolKind = "variable"
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,13 +78,13 @@ class Finding:
 
 @dataclass(frozen=True, slots=True)
 class SymbolSchema:
-    """The configured collection of forbidden subwords and canonical terms."""
+    """The configured collection of forbidden subwords and canonical subword replacements."""
 
     include: tuple[str, ...] = ("src/**/*.py", "tests/**/*.py")
     exclude: tuple[str, ...] = ()
     forbidden_subwords: tuple[str, ...] = ()
     allowed_symbols: tuple[str, ...] = ()
-    terms: tuple[Term, ...] = ()
+    replacements: tuple[Replacement, ...] = ()
     source_path: Path = Path("symbols.toml")
 
 
@@ -79,13 +95,15 @@ def split_subwords(text: str) -> tuple[str, ...]:
 
 def singularize(word: str) -> str:
     """Normalize a lowercase English subword to its singular form."""
-    if len(word) <= 3 or word in INVARIANT_SINGULARS or not word.endswith("s"):
+    if len(word) <= 3 or word in INVARIANT_SINGULARS:
         return word
+    if word.endswith("es") and word[:-2] in INVARIANT_SINGULARS:
+        return word[:-2]
     if len(word) > 4 and word.endswith("ies"):
         return f"{word[:-3]}y"
     if word.endswith(("sses", "xes", "zes", "ches", "shes")):
         return word[:-2]
-    if not word.endswith(("ss", "us", "is")):
+    if word.endswith("s") and not word.endswith(("ss", "us", "is")):
         return word[:-1]
     return word
 
@@ -138,7 +156,7 @@ def load_schema(path: Path = Path("symbols.toml")) -> SymbolSchema:
         exclude=exclude,
         forbidden_subwords=forbidden_subwords,
         allowed_symbols=allowed_symbols,
-        terms=_extract_terms(raw.get("terms", [])),
+        replacements=_extract_replacements(raw.get("replacements", {})),
         source_path=path,
     )
 
@@ -156,34 +174,21 @@ def _validate_table_keys(table: dict[str, object], allowed: frozenset[str], labe
         raise ValueError(f"Unknown keys in {label}: {joined}.")
 
 
-def _extract_string(raw_text: object, label: str) -> str:
-    if not isinstance(raw_text, str):
-        raise ValueError(f"Expected '{label}' to be a string.")
-    return raw_text.strip()
-
-
 def _extract_string_tuple(raw_list: object, label: str) -> tuple[str, ...]:
     if not isinstance(raw_list, list) or not all(isinstance(entry, str) for entry in raw_list):
         raise ValueError(f"Expected '{label}' to be a list of strings.")
     return tuple(raw_list)
 
 
-def _extract_terms(raw_entries: object) -> tuple[Term, ...]:
-    if not isinstance(raw_entries, list):
-        raise ValueError("Expected 'terms' to be an array of tables ([[terms]]).")
-    terms: list[Term] = []
-    for raw_entry in raw_entries:
-        entry = _extract_table(raw_entry, "terms")
-        _validate_table_keys(entry, ALLOWED_TERM_KEYS, "terms")
-        forbidden = _extract_string_tuple(
-            entry.get("forbidden_terms", []),
-            "terms.forbidden_terms",
-        )
-        terms.append(
-            Term(
-                term=_extract_string(entry.get("term", ""), "terms.term"),
-                definition=_extract_string(entry.get("definition", ""), "terms.definition"),
-                forbidden_terms=tuple(synonym.strip() for synonym in forbidden),
+def _extract_replacements(raw_replacements: object) -> tuple[Replacement, ...]:
+    table = _extract_table(raw_replacements, "replacements")
+    replacements: list[Replacement] = []
+    for canonical, raw_forbidden in table.items():
+        forbidden = _extract_string_tuple(raw_forbidden, f"replacements.{canonical}")
+        replacements.append(
+            Replacement(
+                canonical=canonical.strip(),
+                forbidden=tuple(synonym.strip() for synonym in forbidden),
             )
         )
-    return tuple(terms)
+    return tuple(replacements)

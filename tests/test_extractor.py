@@ -67,6 +67,34 @@ def test_extract_symbols_from_syntax(source_code: str, expected_names: list[str]
     assert [symbol.name for symbol in symbols] == ["sample", *expected_names]
 
 
+def test_extract_symbols_records_ast_symbol_kinds() -> None:
+    source_code = (
+        "import os as os_alias\n"
+        "type RecordList[RecordType] = list[RecordType]\n"
+        "class SampleProcessor:\n"
+        "    def load_entry(self, count: int) -> None:\n"
+        "        self.instance_attr = count\n"
+        "        try:\n"
+        "            local_name = 1\n"
+        "        except OSError as captured_error:\n"
+        "            pass\n"
+    )
+    symbols, findings = extract_symbols(source_code, file=Path("sample.py"))
+    assert not findings
+    assert [(symbol.name, symbol.kind) for symbol in symbols] == [
+        ("sample", "module"),
+        ("os_alias", "alias"),
+        ("RecordList", "variable"),
+        ("RecordType", "typevar"),
+        ("SampleProcessor", "class"),
+        ("load_entry", "function"),
+        ("count", "parameter"),
+        ("instance_attr", "attribute"),
+        ("local_name", "variable"),
+        ("captured_error", "exception"),
+    ]
+
+
 def test_extract_symbols_skips_module_stem_for_memory_and_dunder() -> None:
     memory_symbols, _ = extract_symbols("entry = 1\n", file=Path("<memory>"))
     dunder_symbols, _ = extract_symbols("entry = 1\n", file=Path("__init__.py"))

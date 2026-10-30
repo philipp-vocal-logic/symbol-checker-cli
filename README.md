@@ -1,6 +1,6 @@
 # symbol-checker-cli
 
-A CLI checker that validates a project's `symbols.toml` schema and checks Python source files for forbidden subwords and forbidden terms, emitting findings with actionable suggestions.
+A CLI checker that validates a project's `symbols.toml` schema and checks Python AST symbols for forbidden subwords and non-canonical subword replacements, emitting findings with actionable suggestions.
 
 ## Configuration (`symbols.toml`)
 
@@ -11,10 +11,10 @@ exclude = []
 forbidden_subwords = ["data", "info", "item", "obj", "val", "temp"]
 allowed_symbols = []
 
-[[terms]]
-term = "load"
-definition = "Read and deserialize a configuration or source text from a filesystem path."
-forbidden_terms = ["fetch", "retrieve", "obtain", "read_config"]
+[replacements]
+load = ["fetch", "retrieve", "obtain", "read_config"]
+index = ["idx", "pos"]
+error = ["err", "exc"]
 ```
 
 ## Usage

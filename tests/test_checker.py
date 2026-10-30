@@ -6,7 +6,7 @@ import pytest
 
 from symbol_checker.checker import check_project, check_source
 from symbol_checker.cli import main
-from symbol_checker.schema import SymbolSchema, Term
+from symbol_checker.schema import Replacement, SymbolSchema
 
 
 def _build_test_schema(source_path: Path = Path("symbols.toml")) -> SymbolSchema:
@@ -14,13 +14,7 @@ def _build_test_schema(source_path: Path = Path("symbols.toml")) -> SymbolSchema
         include=("src/**/*.py",),
         exclude=("src/ignored/**",),
         forbidden_subwords=("data",),
-        terms=(
-            Term(
-                term="load",
-                definition="Read configuration from a file.",
-                forbidden_terms=("fetch",),
-            ),
-        ),
+        replacements=(Replacement(canonical="load", forbidden=("fetch",)),),
         source_path=source_path,
     )
 
@@ -43,7 +37,7 @@ def test_check_source_reports_forbidden_module_stem() -> None:
     ]
 
 
-def test_check_source_reports_forbidden_term() -> None:
+def test_check_source_reports_replacement_finding() -> None:
     findings = check_source(
         "def fetch_schema() -> None:\n    pass\n",
         _build_test_schema(),
@@ -51,8 +45,8 @@ def test_check_source_reports_forbidden_term() -> None:
     )
     assert [finding.format_line() for finding in findings] == [
         "src/sample.py:1:1: Symbol 'fetch_schema': "
-        "Uses forbidden term 'fetch'. "
-        "Suggestion: Use canonical term 'load' (Read configuration from a file.)."
+        "Uses non-canonical 'fetch'. "
+        "Suggestion: Use canonical 'load'."
     ]
 
 

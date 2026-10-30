@@ -5,8 +5,8 @@ from pathlib import Path
 import pytest
 
 from symbol_checker.schema import (
+    Replacement,
     SymbolSchema,
-    Term,
     load_schema,
     matches_subwords,
     normalize_subwords,
@@ -33,13 +33,14 @@ def test_split_subwords(identifier: str, expected: tuple[str, ...]) -> None:
 def test_normalize_subwords_singularizes_plurals_and_preserves_invariants() -> None:
     assert normalize_subwords("entries_and_boxes") == ("entry", "and", "box")
     assert normalize_subwords("ABCs_and_URLs") == ("abc", "and", "url")
-    assert normalize_subwords("series_species_news_alias_bias_canvas") == (
+    assert normalize_subwords("series_species_news_alias_bias_canvas_lenses") == (
         "series",
         "species",
         "news",
         "alias",
         "bias",
         "canvas",
+        "lens",
     )
 
 
@@ -64,10 +65,8 @@ include = ["src/**/*.py"]
 exclude = ["src/generated/**"]
 forbidden_subwords = ["data"]
 
-[[terms]]
-term = "load"
-definition = "Read configuration from disk."
-forbidden_terms = ["fetch"]
+[replacements]
+load = ["fetch"]
 """,
         encoding="utf-8",
     )
@@ -75,13 +74,7 @@ forbidden_terms = ["fetch"]
         include=("src/**/*.py",),
         exclude=("src/generated/**",),
         forbidden_subwords=("data",),
-        terms=(
-            Term(
-                term="load",
-                definition="Read configuration from disk.",
-                forbidden_terms=("fetch",),
-            ),
-        ),
+        replacements=(Replacement(canonical="load", forbidden=("fetch",)),),
         source_path=config_file,
     )
 
@@ -91,14 +84,14 @@ forbidden_terms = ["fetch"]
     [
         ('[unknown_section]\nkey = "value"\n', "Unknown keys in root"),
         ('[settings]\ninclude = "src/**/*.py"\n', "Expected 'settings.include' to be a list"),
-        ('[terms]\nterm = "load"\n', "Expected 'terms' to be an array"),
+        ('replacements = ["load"]\n', "Expected 'replacements' to be a TOML table"),
         (
-            '[[terms]]\nterm = ["load"]\ndefinition = "Read."\n',
-            "Expected 'terms.term' to be a string",
+            '[replacements]\nload = "fetch"\n',
+            "Expected 'replacements.load' to be a list of strings",
         ),
         (
-            '[[terms]]\nterm = "load"\ndefinition = 42\n',
-            "Expected 'terms.definition' to be a string",
+            "[replacements]\nload = [42]\n",
+            "Expected 'replacements.load' to be a list of strings",
         ),
     ],
 )
@@ -117,58 +110,48 @@ def test_load_schema_rejects_invalid_toml(
     ("schema", "expected_message"),
     [
         (
-            SymbolSchema(terms=(Term(term="", definition="Missing term name."),)),
-            "empty term",
+            SymbolSchema(replacements=(Replacement(canonical="", forbidden=("fetch",)),)),
+            "empty replacement key",
         ),
         (
-            SymbolSchema(terms=(Term(term="load", definition=""),)),
-            "empty definition",
-        ),
-        (
-            SymbolSchema(
-                terms=(Term(term="load", definition="Read file.", forbidden_terms=("",)),)
-            ),
-            "empty forbidden_term",
+            SymbolSchema(replacements=(Replacement(canonical="load", forbidden=("",)),)),
+            "empty forbidden entry",
         ),
         (
             SymbolSchema(
-                terms=(
-                    Term(term="check", definition="First definition."),
-                    Term(term="check", definition="Second definition."),
+                replacements=(
+                    Replacement(canonical="check", forbidden=("lint",)),
+                    Replacement(canonical="checks", forbidden=("scan",)),
                 )
             ),
-            "Duplicate canonical term 'check'",
+            "Duplicate canonical replacement 'checks'",
         ),
         (
             SymbolSchema(
-                terms=(
-                    Term(term="load", definition="Read file."),
-                    Term(term="check", definition="Verify rules.", forbidden_terms=("load",)),
+                replacements=(
+                    Replacement(canonical="load", forbidden=("fetch",)),
+                    Replacement(canonical="check", forbidden=("load",)),
                 )
             ),
-            "Term 'load' collides with forbidden_term 'load'",
+            "Replacement 'load' collides with forbidden entry 'load'",
         ),
         (
             SymbolSchema(
-                terms=(
-                    Term(term="read_config_path", definition="Configuration path."),
-                    Term(
-                        term="load",
-                        definition="Read file.",
-                        forbidden_terms=("read_config",),
-                    ),
+                replacements=(
+                    Replacement(canonical="read_config_path", forbidden=("cfg_path",)),
+                    Replacement(canonical="load", forbidden=("read_config",)),
                 )
             ),
-            "Term 'read_config_path' collides with forbidden_term 'read_config'",
+            "Replacement 'read_config_path' collides with forbidden entry 'read_config'",
         ),
         (
             SymbolSchema(
-                terms=(
-                    Term(term="load", definition="Read file.", forbidden_terms=("fetch",)),
-                    Term(term="check", definition="Verify rules.", forbidden_terms=("fetch",)),
+                replacements=(
+                    Replacement(canonical="load", forbidden=("fetch",)),
+                    Replacement(canonical="check", forbidden=("fetch",)),
                 )
             ),
-            "Forbidden term 'fetch' in 'check' collides with 'fetch' in 'load'",
+            "Forbidden entry 'fetch' in 'check' collides with 'fetch' in 'load'",
         ),
         (
             SymbolSchema(forbidden_subwords=("multi_word",)),
@@ -177,27 +160,9 @@ def test_load_schema_rejects_invalid_toml(
         (
             SymbolSchema(
                 forbidden_subwords=("symbol",),
-                terms=(Term(term="symbol_table", definition="Lookup table."),),
+                replacements=(Replacement(canonical="symbol_table", forbidden=("sym_tbl",)),),
             ),
-            "Canonical term 'symbol_table' collides with forbidden_subword 'symbol'",
-        ),
-        (
-            SymbolSchema(
-                terms=(
-                    Term(term="check", definition="Verify rules.", forbidden_terms=("inspect",)),
-                    Term(term="symbol", definition="Inspect a syntax tree node."),
-                )
-            ),
-            "Definition of 'symbol' uses forbidden_term 'inspect'",
-        ),
-        (
-            SymbolSchema(
-                terms=(
-                    Term(term="load", definition="Read configuration from disk."),
-                    Term(term="parse", definition="Read configuration from disk."),
-                )
-            ),
-            "Terms 'load' and 'parse' have identical definitions",
+            "Canonical replacement 'symbol_table' collides with forbidden_subword 'symbol'",
         ),
     ],
 )
