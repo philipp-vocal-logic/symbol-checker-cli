@@ -5,6 +5,7 @@ import contextlib
 import io
 import re
 import tokenize
+from dataclasses import dataclass
 from pathlib import Path
 
 from symbol_checker.schema import Finding, Symbol, normalize_subwords
@@ -105,9 +106,58 @@ def _is_intrinsic_name(name: str) -> bool:
     return len(name) > 4 and name.startswith("__") and name.endswith("__")
 
 
-def extract_ignored_lines(source_text: str) -> dict[int, frozenset[str]]:
-    """Extract per-line ignore targets from real Python comments (empty frozenset = ignore all)."""
-    ignored: dict[int, frozenset[str]] = {}
+@dataclass(frozen=True, slots=True)
+class IgnoreDirective:
+    """A parsed '# symbol: ignore' comment on a source line."""
+
+    line: int
+    column: int
+    raw_targets: tuple[str, ...] | None = None
+    norm_targets: frozenset[str] = frozenset()
+
+
+def filter_ignored_findings(
+    candidates: list[tuple[Finding, frozenset[str]]],
+    source_text: str,
+    file: Path,
+) -> list[Finding]:
+    """Filter symbol findings using '# symbol: ignore' comments and report invalid directives."""
+    directives = _extract_ignored_lines(source_text)
+    used_lines: set[int] = set()
+    used_targets: dict[int, set[str]] = {}
+    findings = [
+        finding
+        for finding, ignore_keys in candidates
+        if not _is_ignored(
+            finding.line, ignore_keys, directives.get(finding.line), used_lines, used_targets
+        )
+    ]
+    for directive in directives.values():
+        findings.extend(_check_single_directive(directive, used_lines, used_targets, file))
+    return findings
+
+
+def _is_ignored(
+    line: int,
+    ignore_keys: frozenset[str],
+    directive: IgnoreDirective | None,
+    used_lines: set[int],
+    used_targets: dict[int, set[str]],
+) -> bool:
+    if directive is None:
+        return False
+    if directive.raw_targets is None:
+        used_lines.add(line)
+        return True
+    matched = ignore_keys & directive.norm_targets
+    if not matched:
+        return False
+    used_targets.setdefault(line, set()).update(matched)
+    return True
+
+
+def _extract_ignored_lines(source_text: str) -> dict[int, IgnoreDirective]:
+    ignored: dict[int, IgnoreDirective] = {}
     reader = io.StringIO(source_text).readline
     with contextlib.suppress(tokenize.TokenError, IndentationError):
         for comment_record in tokenize.generate_tokens(reader):
@@ -115,16 +165,66 @@ def extract_ignored_lines(source_text: str) -> dict[int, frozenset[str]]:
                 continue
             match = IGNORE_COMMENT_PATTERN.search(comment_record.string)
             if match is not None:
-                ignored[comment_record.start[0]] = _parse_ignore_targets(match.group(1))
+                line = comment_record.start[0]
+                column = comment_record.start[1] + match.start() + 1
+                ignored[line] = _build_ignore_directive(line, column, match.group(1))
     return ignored
 
 
-def _parse_ignore_targets(raw_targets: str | None) -> frozenset[str]:
-    if raw_targets is None:
-        return frozenset()
-    targets: set[str] = set()
-    for part in raw_targets.split(","):
-        target = "_".join(normalize_subwords(part))
-        if target:
-            targets.add(target)
-    return frozenset(targets)
+def _build_ignore_directive(
+    line: int,
+    column: int,
+    raw_group: str | None,
+) -> IgnoreDirective:
+    if raw_group is None:
+        return IgnoreDirective(line=line, column=column)
+    stripped = raw_group.strip()
+    if not stripped:
+        return IgnoreDirective(line=line, column=column, raw_targets=())
+    raw_targets = tuple(part.strip() for part in stripped.split(","))
+    norm_targets = frozenset(
+        target for part in raw_targets if (target := "_".join(normalize_subwords(part)))
+    )
+    return IgnoreDirective(line, column, raw_targets, norm_targets)
+
+
+def _check_single_directive(
+    directive: IgnoreDirective,
+    used_lines: set[int],
+    used_targets: dict[int, set[str]],
+    file: Path,
+) -> list[Finding]:
+    if directive.raw_targets is None:
+        if directive.line in used_lines:
+            return []
+        return [
+            Finding(
+                file,
+                directive.line,
+                directive.column,
+                "Unused 'symbol: ignore' comment matched no findings.",
+                "Remove the unused 'symbol: ignore' comment.",
+            )
+        ]
+    if not directive.raw_targets:
+        return [
+            Finding(
+                file,
+                directive.line,
+                directive.column,
+                "Empty 'symbol: ignore[]' comment specifies no targets.",
+                "Specify target subwords in 'symbol: ignore[...]' or use '# symbol: ignore'.",
+            )
+        ]
+    line_used = used_targets.get(directive.line, set())
+    return [
+        Finding(
+            file,
+            directive.line,
+            directive.column,
+            f"Unused ignore target '{raw_target}' in 'symbol: ignore' comment.",
+            "Remove the unused target or specify a subword reported on this line.",
+        )
+        for raw_target in directive.raw_targets
+        if not (norm := "_".join(normalize_subwords(raw_target))) or norm not in line_used
+    ]

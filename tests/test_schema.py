@@ -176,15 +176,6 @@ def test_load_schema_rejects_invalid_toml(
         ),
         (
             SymbolSchema(
-                replacements=(
-                    Replacement(canonical="load", forbidden=("fetch",)),
-                    Replacement(canonical="check", forbidden=("load_all",)),
-                )
-            ),
-            "Replacement 'load' collides with forbidden entry 'load_all'",
-        ),
-        (
-            SymbolSchema(
                 forbidden_subwords=("obj",),
                 replacements=(Replacement(canonical="matcher", forbidden=("filter_obj",)),),
             ),
@@ -199,3 +190,13 @@ def test_validate_schema_reports_single_finding(
     findings = validate_schema(schema)
     assert len(findings) == 1
     assert expected_message in findings[0].message
+
+
+def test_validate_schema_allows_canonical_subword_in_compound_forbidden() -> None:
+    schema = SymbolSchema(
+        replacements=(
+            Replacement(canonical="config", forbidden=("cfg",)),
+            Replacement(canonical="load", forbidden=("read_config",)),
+        )
+    )
+    assert validate_schema(schema) == []

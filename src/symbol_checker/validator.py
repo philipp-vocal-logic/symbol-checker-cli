@@ -102,9 +102,7 @@ def _validate_single_forbidden(
         ]
 
     for norm_canonical, colliding in canonical_by_norm.items():
-        if matches_subwords(norm_canonical, norm_forbidden) or matches_subwords(
-            norm_forbidden, norm_canonical
-        ):
+        if matches_subwords(norm_canonical, norm_forbidden):
             suggestion = (
                 f"Remove '{forbidden}' from '{entry.canonical}'."
                 if colliding.canonical == entry.canonical

@@ -163,6 +163,32 @@ def test_check_source_deduplicates_repeated_subword_and_honors_ignore() -> None:
     ]
 
 
+def test_check_source_reports_empty_and_unused_ignore_comments() -> None:
+    schema = SymbolSchema(
+        forbidden_subwords=("data",),
+        replacements=(Replacement(canonical="load", forbidden=("fetch",)),),
+    )
+    findings = check_source(
+        "user_data = 1  # symbol: ignore[]\n"
+        "clean_name = 2  # symbol: ignore\n"
+        "fetch_record = 3  # symbol: ignore[load, typo]\n",
+        schema,
+    )
+    assert [(finding.line, finding.symbol_name, finding.message) for finding in findings] == [
+        (1, "user_data", "Contains ambiguous forbidden subword 'data'."),
+        (1, None, "Empty 'symbol: ignore[]' comment specifies no targets."),
+        (2, None, "Unused 'symbol: ignore' comment matched no findings."),
+        (3, None, "Unused ignore target 'typo' in 'symbol: ignore' comment."),
+    ]
+
+
+def test_check_project_reports_finding_when_no_files_discovered(tmp_path: Path) -> None:
+    config_path = tmp_path / "symbols.toml"
+    config_path.write_text('[settings]\ninclude = ["nomatch/**/*.py"]\n', encoding="utf-8")
+
+    assert main(["--config", str(config_path)]) == 1
+
+
 def test_cli_main_reports_missing_or_unmatched_targets(tmp_path: Path) -> None:
     config_path = tmp_path / "symbols.toml"
     config_path.write_text('[settings]\ninclude = ["src/**/*.py"]\n', encoding="utf-8")
