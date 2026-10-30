@@ -4,7 +4,6 @@ import re
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
 
 _UPPER = r"[A-ZÀ-ÖØ-Þ]"
 _LOWER = r"[a-zß-öø-ÿ]"
@@ -58,18 +57,6 @@ IRREGULAR_PLURALS: dict[str, str] = {
     "vms": "vm",
 }
 
-SymbolKind = Literal[
-    "module",
-    "class",
-    "function",
-    "parameter",
-    "variable",
-    "attribute",
-    "exception",
-    "alias",
-    "typevar",
-]
-
 ALLOWED_ROOT_KEYS: frozenset[str] = frozenset({"settings", "replacements"})
 ALLOWED_SETTINGS_KEYS: frozenset[str] = frozenset(
     {"include", "exclude", "forbidden_subwords", "allowed_symbols"}
@@ -92,7 +79,6 @@ class Symbol:
     file: Path
     line: int
     column: int
-    kind: SymbolKind = "variable"
 
 
 @dataclass(frozen=True, slots=True)

@@ -25,7 +25,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--config",
         type=Path,
-        default=Path("symbols.toml"),
+        default=None,
         help="Path to the symbol schema configuration file (default: symbols.toml).",
     )
     args = parser.parse_args(argv)
@@ -47,14 +47,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     return 1 if findings else 0
 
 
-def _resolve_config_path(config_path: Path) -> Path:
-    if config_path != Path("symbols.toml") or config_path.is_file():
+def _resolve_config_path(config_path: Path | None) -> Path:
+    if config_path is not None:
         return config_path
-    for parent in Path.cwd().resolve().parents:
-        parent_config = parent / "symbols.toml"
-        if parent_config.is_file():
-            return parent_config
-    return config_path
+    cwd = Path.cwd().resolve()
+    for directory in (cwd, *cwd.parents):
+        candidate = directory / "symbols.toml"
+        if candidate.is_file():
+            return candidate
+    return Path("symbols.toml")
 
 
 if __name__ == "__main__":

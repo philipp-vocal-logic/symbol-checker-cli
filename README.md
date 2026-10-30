@@ -38,6 +38,11 @@ uv run symbol --config path/to/symbols.toml
 - `1`: One or more findings reported.
 - `2`: Configuration file could not be read or parsed.
 
+## Limitations
+
+- Symbols are split into subwords on case changes, underscores, and digits only. All-lowercase run-together names such as `mydata` are not detected.
+- Only definitions are checked (assignments, parameters, functions, classes, `self`/`cls` attributes, `as` aliases); usages and plain imports are not.
+
 ## Development
 
 ```bash

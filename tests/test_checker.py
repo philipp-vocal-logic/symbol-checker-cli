@@ -144,7 +144,7 @@ def test_check_source_deduplicates_repeated_subword_and_honors_ignore() -> None:
     schema = SymbolSchema(
         forbidden_subwords=("data",),
         allowed_symbols=("allowed_data",),
-        replacements=(Replacement(canonical="load", forbidden=("fetch",)),),
+        replacements=(Replacement(canonical="load", forbidden=("fetch", "read_config")),),
     )
     findings = check_source(
         "data_to_data = 1\n"
@@ -152,7 +152,8 @@ def test_check_source_deduplicates_repeated_subword_and_honors_ignore() -> None:
         "compact_data = 3  #symbol:ignore\n"
         'literal_marker = "# symbol: ignore"; unignored_data = 4\n'
         "fetch_data = 5  # symbol: ignore[data]\n"
-        "allowed_data = 6\n",
+        "allowed_data = 6\n"
+        "read_config_path = 7  # symbol: ignore[readConfigs]\n",
         schema,
     )
     assert [(finding.symbol_name, finding.message) for finding in findings] == [
@@ -193,3 +194,4 @@ def test_cli_main_discovers_parent_config_from_subdirectory(
     monkeypatch.chdir(tmp_path / "pkg")
 
     assert main(["tests/"]) == 0
+    assert main(["--config", "symbols.toml", "tests/"]) == 2

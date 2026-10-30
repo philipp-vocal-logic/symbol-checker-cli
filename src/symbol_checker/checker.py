@@ -121,8 +121,8 @@ def _check_single_symbol(
         )
         for forbidden_words, raw_forbidden, entry in compiled.replacements
         if matches_subwords(subwords, forbidden_words)
-        and raw_forbidden.lower() not in ignored_targets
-        and entry.canonical.lower() not in ignored_targets
+        and "_".join(forbidden_words) not in ignored_targets
+        and "_".join(normalize_subwords(entry.canonical)) not in ignored_targets
     ]
     return [*subword_findings, *replacement_findings]
 

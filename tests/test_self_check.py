@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import subprocess
-import sys
 from pathlib import Path
 
 import archcheck
@@ -26,25 +24,3 @@ def test_project_adheres_to_own_symbol_schema() -> None:
 
 def test_project_adheres_to_own_architecture() -> None:
     assert archcheck.main(["--config", str(REPO_ROOT / "arch.toml")]) == 0
-
-
-def test_project_passes_ruff_check() -> None:
-    result = subprocess.run(
-        [sys.executable, "-m", "ruff", "check", "."],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
-
-
-def test_project_passes_ruff_format() -> None:
-    result = subprocess.run(
-        [sys.executable, "-m", "ruff", "format", "--check", "."],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"

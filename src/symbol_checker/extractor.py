@@ -7,7 +7,7 @@ import re
 import tokenize
 from pathlib import Path
 
-from symbol_checker.schema import Finding, Symbol, SymbolKind, singularize
+from symbol_checker.schema import Finding, Symbol, normalize_subwords
 
 INTRINSIC_NAMES: frozenset[str] = frozenset({"_", "self", "cls"})
 IGNORE_COMMENT_PATTERN = re.compile(
@@ -50,8 +50,8 @@ def extract_symbols(
     module_name = file.parent.name if file.stem == "__init__" else file.stem
     if file != Path("<memory>") and not _is_intrinsic_name(module_name):
         seen_names.add(module_name)
-        symbols.append(Symbol(name=module_name, file=file, line=1, column=1, kind="module"))
-    _extract_from_node(tree, file, symbols, seen_names)
+        symbols.append(Symbol(name=module_name, file=file, line=1, column=1))
+    _extract_from_node(tree, file, symbols, seen_names, set())
     return symbols, []
 
 
@@ -60,48 +60,42 @@ def _extract_from_node(
     file: Path,
     symbols: list[Symbol],
     seen_names: set[str],
+    class_seen: set[str],
 ) -> None:
-    binding = _extract_node_binding(node)
-    if binding is not None:
-        name, line, column, kind = binding
-        if not _is_intrinsic_name(name) and name not in seen_names:
-            seen_names.add(name)
-            symbols.append(Symbol(name=name, file=file, line=line, column=column, kind=kind))
+    name = _extract_binding_name(node)
+    if name is not None and not _is_intrinsic_name(name):
+        scope_seen = class_seen if isinstance(node, ast.Attribute) else seen_names
+        if name not in scope_seen:
+            scope_seen.add(name)
+            line, column = node.lineno, node.col_offset + 1
+            symbols.append(Symbol(name=name, file=file, line=line, column=column))
 
     child_seen = set() if isinstance(node, SCOPE_NODE_TYPES) else seen_names
+    child_class_seen = child_seen if isinstance(node, ast.ClassDef) else class_seen
     for child in ast.iter_child_nodes(node):
-        _extract_from_node(child, file, symbols, child_seen)
+        _extract_from_node(child, file, symbols, child_seen, child_class_seen)
 
 
-def _extract_node_binding(node: ast.AST) -> tuple[str, int, int, SymbolKind] | None:
-    if isinstance(node, ast.ClassDef):
-        return node.name, node.lineno, node.col_offset + 1, "class"
-    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-        return node.name, node.lineno, node.col_offset + 1, "function"
+def _extract_binding_name(node: ast.AST) -> str | None:
+    if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+        return node.name
     if isinstance(node, ast.arg):
-        return node.arg, node.lineno, node.col_offset + 1, "parameter"
+        return node.arg
     if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
-        return node.id, node.lineno, node.col_offset + 1, "variable"
+        return node.id
     if isinstance(node, ast.Attribute) and isinstance(node.ctx, ast.Store):
-        return _extract_attribute_binding(node)
-    return _extract_pattern_or_alias_binding(node)
+        is_instance = isinstance(node.value, ast.Name) and node.value.id in ("self", "cls")
+        return node.attr if is_instance else None
+    return _extract_pattern_or_alias_name(node)
 
 
-def _extract_attribute_binding(node: ast.Attribute) -> tuple[str, int, int, SymbolKind] | None:
-    if isinstance(node.value, ast.Name) and node.value.id in ("self", "cls"):
-        return node.attr, node.lineno, node.col_offset + 1, "attribute"
-    return None
-
-
-def _extract_pattern_or_alias_binding(node: ast.AST) -> tuple[str, int, int, SymbolKind] | None:
-    if isinstance(node, ast.ExceptHandler) and node.name:
-        return node.name, node.lineno, node.col_offset + 1, "exception"
-    if isinstance(node, (ast.MatchAs, ast.MatchStar)) and node.name:
-        return node.name, node.lineno, node.col_offset + 1, "variable"
-    if isinstance(node, ast.alias) and node.asname:
-        return node.asname, node.lineno, node.col_offset + 1, "alias"
+def _extract_pattern_or_alias_name(node: ast.AST) -> str | None:
+    if isinstance(node, (ast.ExceptHandler, ast.MatchAs, ast.MatchStar)):
+        return node.name
+    if isinstance(node, ast.alias):
+        return node.asname
     if isinstance(node, (ast.TypeVar, ast.ParamSpec, ast.TypeVarTuple)):
-        return node.name, node.lineno, node.col_offset + 1, "typevar"
+        return node.name
     return None
 
 
@@ -130,8 +124,7 @@ def _parse_ignore_targets(raw_targets: str | None) -> frozenset[str]:
         return frozenset()
     targets: set[str] = set()
     for part in raw_targets.split(","):
-        cleaned = part.strip().lower()
-        if cleaned:
-            targets.add(cleaned)
-            targets.add(singularize(cleaned))
+        target = "_".join(normalize_subwords(part))
+        if target:
+            targets.add(target)
     return frozenset(targets)
