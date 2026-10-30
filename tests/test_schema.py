@@ -32,7 +32,17 @@ def test_split_subwords(identifier: str, expected: tuple[str, ...]) -> None:
 
 def test_normalize_subwords_singularizes_plurals_and_preserves_invariants() -> None:
     assert normalize_subwords("entries_and_boxes") == ("entry", "and", "box")
-    assert normalize_subwords("ABCs_and_URLs") == ("abc", "and", "url")
+    assert normalize_subwords("ABCs_and_URLs_and_IDs") == ("abc", "and", "url", "and", "id")
+    assert normalize_subwords("caches_statuses_movies_cookies_axes_analyses_buses_gases") == (
+        "cache",
+        "status",
+        "movie",
+        "cookie",
+        "axis",
+        "analysis",
+        "bus",
+        "gas",
+    )
     assert normalize_subwords("series_species_news_alias_bias_canvas_lenses") == (
         "series",
         "species",
@@ -163,6 +173,22 @@ def test_load_schema_rejects_invalid_toml(
                 replacements=(Replacement(canonical="symbol_table", forbidden=("sym_tbl",)),),
             ),
             "Canonical replacement 'symbol_table' collides with forbidden_subword 'symbol'",
+        ),
+        (
+            SymbolSchema(
+                replacements=(
+                    Replacement(canonical="load", forbidden=("fetch",)),
+                    Replacement(canonical="check", forbidden=("load_all",)),
+                )
+            ),
+            "Replacement 'load' collides with forbidden entry 'load_all'",
+        ),
+        (
+            SymbolSchema(
+                forbidden_subwords=("obj",),
+                replacements=(Replacement(canonical="matcher", forbidden=("filter_obj",)),),
+            ),
+            "Forbidden entry 'filter_obj' in 'matcher' collides with forbidden_subword 'obj'",
         ),
     ],
 )

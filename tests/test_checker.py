@@ -144,13 +144,22 @@ def test_check_source_deduplicates_repeated_subword_and_honors_ignore() -> None:
     schema = SymbolSchema(
         forbidden_subwords=("data",),
         allowed_symbols=("allowed_data",),
+        replacements=(Replacement(canonical="load", forbidden=("fetch",)),),
     )
     findings = check_source(
-        "data_to_data = 1\nignored_data = 2  # symbol: ignore\nallowed_data = 3\n",
+        "data_to_data = 1\n"
+        "ignored_data = 2  # symbol: ignore\n"
+        "compact_data = 3  #symbol:ignore\n"
+        'literal_marker = "# symbol: ignore"; unignored_data = 4\n'
+        "fetch_data = 5  # symbol: ignore[data]\n"
+        "allowed_data = 6\n",
         schema,
     )
-    assert len(findings) == 1
-    assert findings[0].symbol_name == "data_to_data"
+    assert [(finding.symbol_name, finding.message) for finding in findings] == [
+        ("data_to_data", "Contains ambiguous forbidden subword 'data'."),
+        ("unignored_data", "Contains ambiguous forbidden subword 'data'."),
+        ("fetch_data", "Uses non-canonical 'fetch'."),
+    ]
 
 
 def test_cli_main_reports_missing_or_unmatched_targets(tmp_path: Path) -> None:
@@ -171,12 +180,16 @@ def test_cli_main_discovers_parent_config_from_subdirectory(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     (tmp_path / "symbols.toml").write_text(
-        '[settings]\ninclude = ["src/**/*.py"]\n',
+        '[settings]\ninclude = ["**/*.py"]\nforbidden_subwords = ["data"]\n',
         encoding="utf-8",
     )
-    src_dir = tmp_path / "src"
-    src_dir.mkdir()
-    (src_dir / "clean.py").write_text("clean_name = 1\n", encoding="utf-8")
-    monkeypatch.chdir(src_dir)
+    root_tests = tmp_path / "tests"
+    root_tests.mkdir()
+    (root_tests / "dirty.py").write_text("user_data = 1\n", encoding="utf-8")
 
-    assert main([]) == 0
+    pkg_tests = tmp_path / "pkg" / "tests"
+    pkg_tests.mkdir(parents=True)
+    (pkg_tests / "clean.py").write_text("clean_name = 1\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path / "pkg")
+
+    assert main(["tests/"]) == 0

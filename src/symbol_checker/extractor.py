@@ -1,11 +1,19 @@
 from __future__ import annotations
 
 import ast
+import contextlib
+import io
+import re
+import tokenize
 from pathlib import Path
 
-from symbol_checker.schema import Finding, Symbol, SymbolKind
+from symbol_checker.schema import Finding, Symbol, SymbolKind, singularize
 
 INTRINSIC_NAMES: frozenset[str] = frozenset({"_", "self", "cls"})
+IGNORE_COMMENT_PATTERN = re.compile(
+    r"#\s*symbol\s*:\s*ignore(?:\[([^\]]*)\])?(?=\s|$|#)",
+    re.IGNORECASE,
+)
 
 SCOPE_NODE_TYPES = (
     ast.ClassDef,
@@ -101,3 +109,29 @@ def _is_intrinsic_name(name: str) -> bool:
     if not name or name in INTRINSIC_NAMES:
         return True
     return len(name) > 4 and name.startswith("__") and name.endswith("__")
+
+
+def extract_ignored_lines(source_text: str) -> dict[int, frozenset[str]]:
+    """Extract per-line ignore targets from real Python comments (empty frozenset = ignore all)."""
+    ignored: dict[int, frozenset[str]] = {}
+    reader = io.StringIO(source_text).readline
+    with contextlib.suppress(tokenize.TokenError, IndentationError):
+        for comment_record in tokenize.generate_tokens(reader):
+            if comment_record.type != tokenize.COMMENT:
+                continue
+            match = IGNORE_COMMENT_PATTERN.search(comment_record.string)
+            if match is not None:
+                ignored[comment_record.start[0]] = _parse_ignore_targets(match.group(1))
+    return ignored
+
+
+def _parse_ignore_targets(raw_targets: str | None) -> frozenset[str]:
+    if raw_targets is None:
+        return frozenset()
+    targets: set[str] = set()
+    for part in raw_targets.split(","):
+        cleaned = part.strip().lower()
+        if cleaned:
+            targets.add(cleaned)
+            targets.add(singularize(cleaned))
+    return frozenset(targets)

@@ -102,14 +102,23 @@ def _validate_single_forbidden(
         ]
 
     for norm_canonical, colliding in canonical_by_norm.items():
-        if matches_subwords(norm_canonical, norm_forbidden):
+        if matches_subwords(norm_canonical, norm_forbidden) or matches_subwords(
+            norm_forbidden, norm_canonical
+        ):
+            suggestion = (
+                f"Remove '{forbidden}' from '{entry.canonical}'."
+                if colliding.canonical == entry.canonical
+                else (
+                    f"Remove '{forbidden}' from '{entry.canonical}' "
+                    f"or merge '{colliding.canonical}' into '{entry.canonical}'."
+                )
+            )
             findings.append(
                 _build_schema_finding(
                     source,
                     f"Replacement '{colliding.canonical}' collides with forbidden entry "
                     f"'{forbidden}' in '{entry.canonical}'.",
-                    f"Remove '{forbidden}' from '{entry.canonical}' "
-                    f"or merge '{colliding.canonical}' into '{entry.canonical}'.",
+                    suggestion,
                 )
             )
 
@@ -145,16 +154,38 @@ def _check_forbidden_subword_collisions(
                 )
             )
             continue
-        target_word = norm[0]
-        for norm_canonical, entry in canonical_by_norm.items():
-            if target_word in norm_canonical:
+        findings.extend(
+            _find_subword_replacement_collisions(subword, norm[0], canonical_by_norm, source)
+        )
+    return findings
+
+
+def _find_subword_replacement_collisions(
+    subword: str,
+    target_word: str,
+    canonical_by_norm: dict[tuple[str, ...], Replacement],
+    source: Path,
+) -> list[Finding]:
+    findings: list[Finding] = []
+    for norm_canonical, entry in canonical_by_norm.items():
+        if target_word in norm_canonical:
+            findings.append(
+                _build_schema_finding(
+                    source,
+                    f"Canonical replacement '{entry.canonical}' collides with "
+                    f"forbidden_subword '{subword}'.",
+                    f"Remove '{subword}' from forbidden_subwords or rename '{entry.canonical}'.",
+                )
+            )
+        for forbidden in entry.forbidden:
+            if target_word in normalize_subwords(forbidden):
                 findings.append(
                     _build_schema_finding(
                         source,
-                        f"Canonical replacement '{entry.canonical}' collides with "
+                        f"Forbidden entry '{forbidden}' in '{entry.canonical}' collides with "
                         f"forbidden_subword '{subword}'.",
-                        f"Remove '{subword}' from forbidden_subwords or "
-                        f"rename '{entry.canonical}'.",
+                        f"Remove '{forbidden}' from '{entry.canonical}' or "
+                        f"remove '{subword}' from forbidden_subwords.",
                     )
                 )
     return findings

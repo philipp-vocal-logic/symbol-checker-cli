@@ -14,8 +14,49 @@ SUBWORD_PATTERN = re.compile(
     rf"|{_UPPER}?{_LOWER}+|\d+"
 )
 INVARIANT_SINGULARS: frozenset[str] = frozenset(
-    {"alias", "atlas", "bias", "canvas", "chaos", "corpus", "lens", "news", "series", "species"}
+    {
+        "alias",
+        "atlas",
+        "bias",
+        "bus",
+        "canvas",
+        "chaos",
+        "corpus",
+        "gas",
+        "lens",
+        "news",
+        "series",
+        "species",
+        "status",
+    }
 )
+IRREGULAR_PLURALS: dict[str, str] = {
+    "aches": "ache",
+    "analyses": "analysis",
+    "axes": "axis",
+    "caches": "cache",
+    "children": "child",
+    "cookies": "cookie",
+    "crises": "crisis",
+    "dbs": "db",
+    "diagnoses": "diagnosis",
+    "goodies": "goodie",
+    "hypotheses": "hypothesis",
+    "ids": "id",
+    "indices": "index",
+    "ips": "ip",
+    "matrices": "matrix",
+    "movies": "movie",
+    "niches": "niche",
+    "parentheses": "parenthesis",
+    "people": "person",
+    "prs": "pr",
+    "syntheses": "synthesis",
+    "theses": "thesis",
+    "uis": "ui",
+    "vertices": "vertex",
+    "vms": "vm",
+}
 
 SymbolKind = Literal[
     "module",
@@ -95,13 +136,15 @@ def split_subwords(text: str) -> tuple[str, ...]:
 
 def singularize(word: str) -> str:
     """Normalize a lowercase English subword to its singular form."""
+    if word in IRREGULAR_PLURALS:
+        return IRREGULAR_PLURALS[word]
     if len(word) <= 3 or word in INVARIANT_SINGULARS:
         return word
     if word.endswith("es") and word[:-2] in INVARIANT_SINGULARS:
         return word[:-2]
     if len(word) > 4 and word.endswith("ies"):
         return f"{word[:-3]}y"
-    if word.endswith(("sses", "xes", "zes", "ches", "shes")):
+    if word.endswith(("sses", "xes", "zzes", "ches", "shes")):
         return word[:-2]
     if word.endswith("s") and not word.endswith(("ss", "us", "is")):
         return word[:-1]

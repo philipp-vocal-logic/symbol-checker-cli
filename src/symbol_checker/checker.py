@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pathspec
 
-from symbol_checker.extractor import extract_symbols
+from symbol_checker.extractor import extract_ignored_lines, extract_symbols
 from symbol_checker.schema import (
     Finding,
     Replacement,
@@ -73,19 +73,15 @@ def _check_source_with_rules(
     file: Path,
 ) -> list[Finding]:
     symbols, findings = extract_symbols(source_text, file=file)
-    ignored_lines = _extract_ignored_lines(source_text)
+    ignored_lines = extract_ignored_lines(source_text)
     for symbol in symbols:
-        if symbol.line not in ignored_lines and symbol.name not in compiled.allowed_symbols:
-            findings.extend(_check_single_symbol(symbol, compiled))
+        if symbol.name in compiled.allowed_symbols:
+            continue
+        ignored_targets = ignored_lines.get(symbol.line)
+        if ignored_targets is not None and not ignored_targets:
+            continue
+        findings.extend(_check_single_symbol(symbol, compiled, ignored_targets or frozenset()))
     return findings
-
-
-def _extract_ignored_lines(source_text: str) -> frozenset[int]:
-    return frozenset(
-        index
-        for index, line_text in enumerate(source_text.splitlines(), start=1)
-        if "# symbol: ignore" in line_text
-    )
 
 
 def _build_compiled_rules(schema: SymbolSchema) -> _CompiledRules:
@@ -102,7 +98,11 @@ def _build_compiled_rules(schema: SymbolSchema) -> _CompiledRules:
     )
 
 
-def _check_single_symbol(symbol: Symbol, compiled: _CompiledRules) -> list[Finding]:
+def _check_single_symbol(
+    symbol: Symbol,
+    compiled: _CompiledRules,
+    ignored_targets: frozenset[str] = frozenset(),
+) -> list[Finding]:
     subwords = normalize_subwords(symbol.name)
     subword_findings = [
         _build_symbol_finding(
@@ -111,7 +111,7 @@ def _check_single_symbol(symbol: Symbol, compiled: _CompiledRules) -> list[Findi
             f"Replace '{word}' with a specific domain noun.",
         )
         for word in dict.fromkeys(subwords)
-        if word in compiled.forbidden_subwords
+        if word in compiled.forbidden_subwords and word not in ignored_targets
     ]
     replacement_findings = [
         _build_symbol_finding(
@@ -121,6 +121,8 @@ def _check_single_symbol(symbol: Symbol, compiled: _CompiledRules) -> list[Findi
         )
         for forbidden_words, raw_forbidden, entry in compiled.replacements
         if matches_subwords(subwords, forbidden_words)
+        and raw_forbidden.lower() not in ignored_targets
+        and entry.canonical.lower() not in ignored_targets
     ]
     return [*subword_findings, *replacement_findings]
 
@@ -183,8 +185,13 @@ def _format_relative_path(path: Path, base_dir: Path) -> Path:
 
 
 def _resolve_target(base_dir: Path, target: Path) -> Path:
-    joined = base_dir / target
-    return (joined if not target.is_absolute() and joined.exists() else target).resolve()
+    if target.is_absolute():
+        return target.resolve()
+    cwd_candidate = target.resolve()
+    if cwd_candidate.exists() and _matches_target(cwd_candidate, base_dir):
+        return cwd_candidate
+    base_candidate = (base_dir / target).resolve()
+    return base_candidate if base_candidate.exists() else cwd_candidate
 
 
 def _filter_targets(
