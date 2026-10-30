@@ -8,6 +8,11 @@ import tokenize
 from dataclasses import dataclass
 from pathlib import Path
 
+from symbol_checker.c_rust import (
+    C_RUST_EXTS,
+    extract_c_rust_ignore_matches,
+    extract_c_rust_symbols,
+)
 from symbol_checker.schema import Finding, Symbol, normalize_subwords
 
 INTRINSIC_NAMES: frozenset[str] = frozenset({"_", "self", "cls"})
@@ -32,7 +37,9 @@ def extract_symbols(
     source_text: str,
     file: Path = Path("<memory>"),
 ) -> tuple[list[Symbol], list[Finding]]:
-    """Parse Python source_text with stdlib ast and extract defined symbols and syntax findings."""
+    """Parse source_text and extract defined symbols and syntax findings."""
+    if file.suffix.lower() in C_RUST_EXTS:
+        return extract_c_rust_symbols(source_text, file=file)
     try:
         tree = ast.parse(source_text, filename=str(file))
     except SyntaxError as error:
@@ -121,8 +128,8 @@ def filter_ignored_findings(
     source_text: str,
     file: Path,
 ) -> list[Finding]:
-    """Filter symbol findings using '# symbol: ignore' comments and report invalid directives."""
-    directives = _extract_ignored_lines(source_text)
+    """Filter symbol findings using 'symbol: ignore' comments and report invalid directives."""
+    directives = _extract_ignored_lines(source_text, file=file)
     used_lines: set[int] = set()
     used_targets: dict[int, set[str]] = {}
     findings = [
@@ -156,7 +163,14 @@ def _is_ignored(
     return True
 
 
-def _extract_ignored_lines(source_text: str) -> dict[int, IgnoreDirective]:
+def _extract_ignored_lines(
+    source_text: str, file: Path = Path("<memory>")
+) -> dict[int, IgnoreDirective]:
+    if file.suffix.lower() in C_RUST_EXTS:
+        return {
+            line: _build_ignore_directive(line, col, group)
+            for line, col, group in extract_c_rust_ignore_matches(source_text)
+        }
     ignored: dict[int, IgnoreDirective] = {}
     reader = io.StringIO(source_text).readline
     with contextlib.suppress(tokenize.TokenError, IndentationError):

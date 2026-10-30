@@ -25,7 +25,7 @@ forbid = [
 fix = "Keep validator.py pure in-memory depending only on schema.py, without filesystem I/O or imports from extractor, checker, or cli."
 
 [[rules]]
-files = ["src/symbol_checker/extractor.py"]
+files = ["src/symbol_checker/extractor.py", "src/symbol_checker/c_rust.py"]
 forbid = [
     "^\\s*(from|import)\\s+.*\\b(validator|checker|cli|pathspec|tomllib|argparse|os|sys)\\b",
     "\\.(read_text|read_bytes|write_text|write_bytes|open)\\s*\\(",
