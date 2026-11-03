@@ -25,17 +25,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--config",
         type=Path,
-        default=None,
+        default=Path("symbols.toml"),
         help="Path to the symbol schema configuration file (default: symbols.toml).",
     )
     args = parser.parse_args(argv)
 
-    config_path = _resolve_config_path(args.config)
     try:
-        schema = load_schema(config_path)
+        schema = load_schema(args.config)
     except (OSError, tomllib.TOMLDecodeError, ValueError) as error:
         print(
-            f"{config_path}:1:1: Failed to load symbol schema: {error}",
+            f"{args.config}:1:1: Failed to load symbol schema: {error}",
             file=sys.stderr,
         )
         return 2
@@ -45,17 +44,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(finding.format_line())
 
     return 1 if findings else 0
-
-
-def _resolve_config_path(config_path: Path | None) -> Path:
-    if config_path is not None:
-        return config_path
-    cwd = Path.cwd().resolve()
-    for directory in (cwd, *cwd.parents):
-        candidate = directory / "symbols.toml"
-        if candidate.is_file():
-            return candidate
-    return Path("symbols.toml")
 
 
 if __name__ == "__main__":

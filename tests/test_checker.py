@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from symbol_checker.checker import check_project, check_source
 from symbol_checker.cli import main
 from symbol_checker.schema import Replacement, SymbolSchema
@@ -202,22 +200,17 @@ def test_cli_main_reports_missing_or_unmatched_targets(tmp_path: Path) -> None:
     assert main(["--config", str(config_path), str(outside_file)]) == 1
 
 
-def test_cli_main_discovers_parent_config_from_subdirectory(
+def test_cli_main_resolves_parent_root_when_config_in_dot_policy(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    (tmp_path / "symbols.toml").write_text(
-        '[settings]\ninclude = ["**/*.py"]\nforbidden_subwords = ["data"]\n',
+    config_path = tmp_path / ".policy" / "symbols.toml"
+    config_path.parent.mkdir()
+    config_path.write_text(
+        '[settings]\ninclude = ["src/**/*.py"]\nforbidden_subwords = ["data"]\n',
         encoding="utf-8",
     )
-    root_tests = tmp_path / "tests"
-    root_tests.mkdir()
-    (root_tests / "dirty.py").write_text("user_data = 1\n", encoding="utf-8")
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    (src_dir / "dirty.py").write_text("user_data = 1\n", encoding="utf-8")
 
-    pkg_tests = tmp_path / "pkg" / "tests"
-    pkg_tests.mkdir(parents=True)
-    (pkg_tests / "clean.py").write_text("clean_name = 1\n", encoding="utf-8")
-    monkeypatch.chdir(tmp_path / "pkg")
-
-    assert main(["tests/"]) == 0
-    assert main(["--config", "symbols.toml", "tests/"]) == 2
+    assert main(["--config", str(config_path)]) == 1

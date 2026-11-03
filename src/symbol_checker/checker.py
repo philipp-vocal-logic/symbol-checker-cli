@@ -35,7 +35,9 @@ def check_project(
 ) -> list[Finding]:
     """Validate the schema and check all discovered project files matching include globs."""
     findings = validate_schema(schema)
-    base_dir = (root if root is not None else schema.source_path.parent).resolve()
+    parent = schema.source_path.parent.resolve()
+    default_root = parent.parent if parent.name == ".policy" else parent
+    base_dir = root.resolve() if root is not None else default_root
     include_matcher = pathspec.PathSpec.from_lines("gitignore", schema.include)
     ignore_matcher = _build_ignore_matcher(base_dir, schema.exclude)
     compiled = _build_compiled_rules(schema)
